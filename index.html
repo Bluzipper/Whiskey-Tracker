@@ -736,6 +736,13 @@ async function saveEdit() {
     }
     saveAccounts();
     closeEdit(); closePanel(); applyFilters(); openPanel(editId);
+    // If on map tab and coords changed, re-center
+    if (activeTab === 'map' && gMap && A[A.findIndex(x => x.id === editId)]) {
+      const updated = A.find(x => x.id === editId);
+      if (updated && updated.lat && updated.lat !== 34.5) {
+        setTimeout(() => { gMap.panTo({ lat: updated.lat, lng: updated.lng }); }, 400);
+      }
+    }
   } else {
     const newId = nextId++;
     const newAcct = { id: newId, lat: 34.5, lng: -106.5, ...d };
@@ -761,7 +768,23 @@ async function saveEdit() {
       }
       saveBtnEl.textContent = 'Save changes'; saveBtnEl.disabled = false;
     }
-    A.push(newAcct); saveAccounts(); closeEdit(); applyFilters();
+    A.push(newAcct);
+    saveAccounts();
+    closeEdit();
+    applyFilters();
+    // Switch to map and fly to the new pin so user can confirm placement
+    if (newAcct.lat !== 34.5 && newAcct.lng !== -106.5) {
+      switchTab('map');
+      if (gMap) {
+        setTimeout(() => {
+          gMap.panTo({ lat: newAcct.lat, lng: newAcct.lng });
+          gMap.setZoom(14);
+          // Find and open the marker for this account
+          const m = markers.find(mk => mk.title === newAcct.name);
+          if (m) google.maps.event.trigger(m, 'click');
+        }, 300);
+      }
+    }
   }
 }
 
