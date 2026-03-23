@@ -419,7 +419,7 @@ let nextId = Math.max(...A.map(a => a.id)) + 1;
 let filt = [...A], activeF = 'all', activeTab = 'map';
 let curId = null, editId = null, editSt = 'current';
 let gMap = null, rMap = null, markers = [], rStops = [], rMarkers = [], rPoly = null;
-const GK = 'AIzaSyB_EVeIZ3VHkxAtaYSer_Dqve1mveU8yBs';
+const GK = 'AIzaSyB_EVeIZ3VHkxAtaYSer_Dqve1mveU8yBs'; // Geocoding now uses Maps JS API instead
 const GC = 'br_geo_v4';
 
 // ── LOGO ──
@@ -446,22 +446,33 @@ function getRegion(a) {
 function gcLoad() { try { return JSON.parse(localStorage.getItem(GC) || '{}'); } catch(e) { return {}; } }
 function gcSave(c) { try { localStorage.setItem(GC, JSON.stringify(c)); } catch(e) {} }
 
+// Geocoder instance — created once Maps API is ready
+let _geocoder = null;
+function getGeocoder() {
+  if (!_geocoder && typeof google !== 'undefined' && google.maps) {
+    _geocoder = new google.maps.Geocoder();
+  }
+  return _geocoder;
+}
+
 async function geocodeOne(addr) {
   if (!addr || !addr.trim()) return null;
-  const url = 'https://maps.googleapis.com/maps/api/geocode/json?address=' + encodeURIComponent(addr.trim()) + '&key=' + GK + '&region=us&components=country:US';
-  try {
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    const d = await r.json();
-    if (d.status === 'OK' && d.results.length > 0) {
-      const l = d.results[0].geometry.location;
-      return { lat: l.lat, lng: l.lng };
-    }
-    console.warn('Geocode status:', d.status, 'for:', addr);
-  } catch(e) {
-    console.error('Geocode error:', e.message);
+  const gc = getGeocoder();
+  if (!gc) {
+    console.warn('Geocoder not ready yet');
+    return null;
   }
-  return null;
+  return new Promise(resolve => {
+    gc.geocode({ address: addr.trim(), region: 'us' }, (results, status) => {
+      if (status === 'OK' && results.length > 0) {
+        const loc = results[0].geometry.location;
+        resolve({ lat: loc.lat(), lng: loc.lng() });
+      } else {
+        console.warn('Geocode failed:', status, 'for:', addr);
+        resolve(null);
+      }
+    });
+  });
 }
 
 async function geocodeAll() {
@@ -469,6 +480,8 @@ async function geocodeAll() {
   A.forEach(a => { if (cache[a.id]) { a.lat = cache[a.id].lat; a.lng = cache[a.id].lng; } });
   const need = A.filter(a => !cache[a.id]);
   if (!need.length) return;
+  // Ensure geocoder is ready (Maps API must be loaded first)
+  if (!getGeocoder()) { console.warn('Geocoder not available'); return; }
   const bar = document.getElementById('geo-fill');
   const txt = document.getElementById('geo-txt');
   document.getElementById('geobar').classList.add('on');
