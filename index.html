@@ -666,11 +666,32 @@ function setSt(s) {
   document.getElementById('opt-cur').className = 'sopt' + (s === 'current' ? ' sc' : '');
   document.getElementById('opt-pro').className = 'sopt' + (s === 'prospect' ? ' sp' : '');
 }
-function saveEdit() {
+async function saveEdit() {
   const nm = document.getElementById('f-nm').value.trim(); if (!nm) { alert('Account name required.'); return; }
   const d = { name: nm, address: document.getElementById('f-ad').value.trim(), type: document.getElementById('f-ty').value, status: editSt, contact: document.getElementById('f-ct').value.trim(), phone: document.getElementById('f-ph').value.trim(), email: document.getElementById('f-em').value.trim(), distributorRep: document.getElementById('f-rp').value.trim(), lastContact: document.getElementById('f-lc').value, bourbon: parseInt(document.getElementById('f-b').value) || 0, rye: parseInt(document.getElementById('f-r').value) || 0, oldFashioned: parseInt(document.getElementById('f-o').value) || 0, q90_bourbon: parseInt(document.getElementById('f-q90b').value) || 0, q90_rye: parseInt(document.getElementById('f-q90r').value) || 0, q90_of: parseInt(document.getElementById('f-q90o').value) || 0, notes: document.getElementById('f-nt').value.trim() };
-  if (editId) { const i = A.findIndex(x => x.id === editId); A[i] = { ...A[i], ...d }; closeEdit(); closePanel(); applyFilters(); openPanel(editId); }
-  else { A.push({ id: nextId++, lat: 34.5, lng: -106.5, ...d }); closeEdit(); applyFilters(); }
+  if (editId) {
+    const i = A.findIndex(x => x.id === editId);
+    const addrChanged = A[i].address !== d.address;
+    A[i] = { ...A[i], ...d };
+    // Re-geocode if address changed
+    if (addrChanged && d.address) {
+      const geo = await geocodeOne(d.address);
+      if (geo) { A[i].lat = geo.lat; A[i].lng = geo.lng; const cache = gcLoad(); cache[A[i].id] = geo; gcSave(cache); }
+    }
+    closeEdit(); closePanel(); applyFilters(); openPanel(editId);
+  } else {
+    const newId = nextId++;
+    const newAcct = { id: newId, lat: 34.5, lng: -106.5, ...d };
+    // Geocode the address for new accounts
+    if (d.address) {
+      const saveBtnEl = document.getElementById('btn-save');
+      saveBtnEl.textContent = 'Locating address…'; saveBtnEl.disabled = true;
+      const geo = await geocodeOne(d.address);
+      if (geo) { newAcct.lat = geo.lat; newAcct.lng = geo.lng; const cache = gcLoad(); cache[newId] = geo; gcSave(cache); }
+      saveBtnEl.textContent = 'Save changes'; saveBtnEl.disabled = false;
+    }
+    A.push(newAcct); closeEdit(); applyFilters();
+  }
 }
 
 // ── ROUTE ──
