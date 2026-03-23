@@ -311,6 +311,16 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
   Tap Share &rarr; Add to Home Screen for app experience
   <button onclick="document.getElementById('pwa-tip').style.display='none';localStorage.setItem('pwa-dismissed','1')" style="background:none;border:none;color:#E8A84A;font-size:14px;cursor:pointer;margin-left:6px;line-height:1">&times;</button>
 </div>
+<div id="export-reminder" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:800;align-items:flex-end;justify-content:center">
+  <div style="background:#1A1108;border-radius:20px 20px 0 0;padding:24px 20px calc(env(safe-area-inset-bottom,20px)+20px);width:100%;max-width:480px;text-align:center">
+    <div style="font-size:28px;margin-bottom:10px">&#x1F4BE;</div>
+    <div style="color:#E8A84A;font-size:17px;font-weight:600;margin-bottom:8px">Weekly backup reminder</div>
+    <div style="color:rgba(232,168,74,.7);font-size:13px;line-height:1.6;margin-bottom:20px">It's been a week since your last export. Tap Export to save your latest account data and keep your devices in sync.</div>
+    <button id="reminder-export" style="display:block;width:100%;padding:13px;background:#E8A84A;color:#1A1108;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;border:none;border-radius:10px;cursor:pointer;margin-bottom:10px">Export now</button>
+    <button id="reminder-snooze" style="display:block;width:100%;padding:12px;background:rgba(232,168,74,.1);color:rgba(232,168,74,.7);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;border:1px solid rgba(232,168,74,.2);border-radius:10px;cursor:pointer;margin-bottom:8px">Remind me tomorrow</button>
+    <button id="reminder-dismiss" style="background:none;border:none;color:rgba(232,168,74,.4);font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;padding:4px">Dismiss</button>
+  </div>
+</div>
 <div id="pov">
   <div id="pan">
     <div class="phdl"></div>
@@ -996,6 +1006,55 @@ self.addEventListener('fetch', e => {
   const swURL = URL.createObjectURL(swBlob);
   navigator.serviceWorker.register(swURL).catch(() => {});
 }
+
+// ── WEEKLY EXPORT REMINDER ──
+(function() {
+  const REMINDER_KEY = 'tg-last-export-check';
+  const SNOOZE_KEY   = 'tg-reminder-snooze';
+  const WEEK_MS      = 7 * 24 * 60 * 60 * 1000;
+  const DAY_MS       =     24 * 60 * 60 * 1000;
+
+  function showReminder() {
+    const el = document.getElementById('export-reminder');
+    el.style.display = 'flex';
+  }
+  function hideReminder() {
+    document.getElementById('export-reminder').style.display = 'none';
+  }
+  function markChecked() {
+    localStorage.setItem(REMINDER_KEY, Date.now().toString());
+  }
+
+  document.getElementById('reminder-export').addEventListener('click', () => {
+    exportCSV();
+    markChecked();
+    localStorage.removeItem(SNOOZE_KEY);
+    hideReminder();
+  });
+  document.getElementById('reminder-snooze').addEventListener('click', () => {
+    localStorage.setItem(SNOOZE_KEY, (Date.now() + DAY_MS).toString());
+    hideReminder();
+  });
+  document.getElementById('reminder-dismiss').addEventListener('click', () => {
+    markChecked();
+    localStorage.removeItem(SNOOZE_KEY);
+    hideReminder();
+  });
+
+  // Check on load — show reminder if it's been 7+ days since last export/dismiss
+  setTimeout(() => {
+    const snoozeUntil = parseInt(localStorage.getItem(SNOOZE_KEY) || '0');
+    if (snoozeUntil && Date.now() < snoozeUntil) return; // snoozed
+    const lastCheck = parseInt(localStorage.getItem(REMINDER_KEY) || '0');
+    if (!lastCheck || (Date.now() - lastCheck) >= WEEK_MS) {
+      showReminder();
+    }
+  }, 5000);
+
+  // Also mark export time whenever user manually hits Export
+  const origExport = exportCSV;
+  window.exportCSV = function() { origExport(); markChecked(); localStorage.removeItem(SNOOZE_KEY); };
+})();
 
 // ── PWA INSTALL TIP ──
 (function() {
