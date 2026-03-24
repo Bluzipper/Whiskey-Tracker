@@ -552,7 +552,22 @@ async function startListening() {
     setSyncStatus('live');
     showToast('✓ ' + A.length + ' accounts loaded');
     if (activeTab === 'map') {
-      if (typeof google !== 'undefined' && google.maps) { if (!gMap) initMap(); else renderMarkers(); }
+      if (typeof google !== 'undefined' && google.maps) {
+        if (!gMap) {
+          initMap();
+        } else {
+          // Force resize in case map div wasn't visible when Maps first loaded
+          setTimeout(() => {
+            google.maps.event.trigger(gMap, 'resize');
+            renderMarkers();
+            // Re-center to NM if no accounts have coords yet
+            if (filt.every(a => !a.lat || (Math.abs(a.lat - 34.5) < 0.1))) {
+              gMap.setCenter({ lat: 34.5, lng: -106.5 });
+              gMap.setZoom(7);
+            }
+          }, 100);
+        }
+      }
     } else if (activeTab === 'list') renderList();
     else if (activeTab === 'dash') renderDash();
     else if (activeTab === 'route') renderRoute();
@@ -821,10 +836,15 @@ async function initMap() {
       styles: [{ featureType:'poi', elementType:'labels', stylers:[{visibility:'off'}] }, { featureType:'transit', stylers:[{visibility:'off'}] }]
     });
     document.getElementById('map-err').classList.remove('on');
-    // Render existing markers immediately (with whatever coords we have)
-    renderMarkers();
-    // Geocode missing ones in the background
-    geocodeAll().then(() => renderMarkers());
+    // Wait for map to be fully idle before rendering markers
+    // This is critical on desktop where map may not be sized yet
+    google.maps.event.addListenerOnce(gMap, 'idle', () => {
+      renderMarkers();
+      // Geocode missing coords in background
+      geocodeAll().then(() => renderMarkers());
+    });
+    // Also render immediately in case idle already fired
+    setTimeout(() => renderMarkers(), 200);
   } catch(err) { showMapErr('Map failed: ' + err.message); }
 }
 
@@ -1255,8 +1275,15 @@ function switchTab(t){
   document.getElementById('dv').className='view'+(t==='dash'?'':' off');
   if(t==='map'){
     if(typeof google !== 'undefined' && google.maps){
-      if(!gMap) initMap();
-      else{ setTimeout(()=>{google.maps.event.trigger(gMap,'resize');renderMarkers();},50); }
+      if(!gMap){
+        initMap();
+      } else {
+        // Always resize + re-render when switching to map tab
+        setTimeout(()=>{
+          google.maps.event.trigger(gMap,'resize');
+          renderMarkers();
+        }, 50);
+      }
     } else {
       // Maps API not loaded yet — show error
       showMapErr('Google Maps API not loaded. Check your Maps JS API key domain restrictions in Google Cloud Console.');
