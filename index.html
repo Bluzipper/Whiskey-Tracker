@@ -1131,6 +1131,13 @@ function renderDash(){
   const tB=A.reduce((s,a)=>s+a.bourbon,0),tR=A.reduce((s,a)=>s+a.rye,0),tOF=A.reduce((s,a)=>s+a.oldFashioned,0);
   const tQ90B=A.reduce((s,a)=>s+a.q90_bourbon,0),tQ90R=A.reduce((s,a)=>s+a.q90_rye,0),tQ90OF=A.reduce((s,a)=>s+a.q90_of,0);
   const dropped=A.filter(a=>{const q=a.q90_bourbon+a.q90_rye+a.q90_of,ann=a.bourbon+a.rye+a.oldFashioned;return ann&&q&&q<Math.round(ann/4)*0.8;});
+  // ── Re-geocode button — always visible at top ──
+  const geoFixBtn = document.createElement('button');
+  geoFixBtn.style.cssText = 'display:block;width:100%;padding:11px;background:#1A1108;color:#E8A84A;font-family:DM Sans,sans-serif;font-size:13px;font-weight:600;border:none;border-radius:var(--r);cursor:pointer;margin-bottom:12px;text-align:center';
+  geoFixBtn.textContent = '\u21ba Fix map pin locations';
+  geoFixBtn.addEventListener('click', () => window.forceReGeocode && window.forceReGeocode());
+  el.appendChild(geoFixBtn);
+
   function dtitle(t){const d=document.createElement('div');d.className='dtitle';d.textContent=t;return d;}
   function kgrid(...cards){const g=document.createElement('div');g.className='kgrid';cards.forEach(c=>g.appendChild(c));return g;}
   function kcard(lbl,val,sub,cls){const c=document.createElement('div');c.className='kcard'+(cls?' '+cls:'');c.innerHTML='<div class="klbl">'+lbl+'</div><div class="kval">'+val+'</div><div class="ksub">'+sub+'</div>';return c;}
