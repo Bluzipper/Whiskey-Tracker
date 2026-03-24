@@ -22,7 +22,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;height:100dvh}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;height:100vh;height:100dvh}
 
 /* LOGIN SCREEN */
 #login-screen{position:fixed;inset:0;background:#1A1108;z-index:9000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px}
@@ -64,11 +64,11 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
 .tab{flex:1;height:var(--th);display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:500;color:var(--mu);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
 .tab.act{color:var(--b);border-bottom-color:var(--b)}
 .tab svg{width:15px;height:15px;flex-shrink:0}
-.content{flex:1;overflow:hidden;position:relative;min-height:0}
-.view{position:absolute;inset:0;transition:opacity .2s}
+.content{flex:1;overflow:hidden;position:relative;min-height:0;height:0}
+.view{position:absolute;top:0;right:0;bottom:0;left:0;transition:opacity .2s}
 .view.off{opacity:0;pointer-events:none}
 #lv,#dv,#rv{overflow-y:auto}
-#map{width:100%;height:100%;background:#e8edf2}
+#map{width:100%;height:100%;min-height:300px;background:#e8edf2}
 .geobar{display:none;position:absolute;top:0;left:0;right:0;z-index:1000;background:#1A1108;padding:10px 14px}
 .geobar.on{display:block}
 #geo-txt{font-size:12px;color:#E8A84A;margin-bottom:6px}
@@ -176,7 +176,7 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
 .sugitem:last-child{border-bottom:none}
 #pov{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:none;align-items:flex-end}
 #pov.on{display:flex}
-#pan{background:var(--card);width:100%;max-height:92dvh;border-radius:20px 20px 0 0;overflow-y:auto;padding-bottom:calc(env(safe-area-inset-bottom,16px)+8px)}
+#pan{background:var(--card);width:100%;max-height:92vh;max-height:92dvh;border-radius:20px 20px 0 0;overflow-y:auto;padding-bottom:calc(env(safe-area-inset-bottom,16px)+8px)}
 .phdl{width:36px;height:4px;background:var(--bdr);border-radius:2px;margin:10px auto 12px}
 .phdr{padding:0 16px 12px;border-bottom:1px solid var(--bdr)}
 .pnm{font-size:17px;font-weight:600;line-height:1.3;margin-bottom:3px}
@@ -209,7 +209,7 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
 .audit-when{flex-shrink:0;font-family:'DM Mono',monospace}
 #eov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:none;align-items:flex-end}
 #eov.on{display:flex}
-#emod{background:var(--card);width:100%;max-height:94dvh;border-radius:20px 20px 0 0;overflow-y:auto;padding-bottom:calc(env(safe-area-inset-bottom,16px)+16px)}
+#emod{background:var(--card);width:100%;max-height:94vh;max-height:94dvh;border-radius:20px 20px 0 0;overflow-y:auto;padding-bottom:calc(env(safe-area-inset-bottom,16px)+16px)}
 .mhdr{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--bdr);position:sticky;top:0;background:var(--card);z-index:10}
 .mtit{font-size:16px;font-weight:600}
 .mcls{font-size:24px;color:var(--mu);background:none;border:none;cursor:pointer;line-height:1;padding:2px 6px}
@@ -232,7 +232,7 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
 .savbtn{display:block;width:calc(100% - 32px);margin:13px 16px 0;padding:13px;background:#1A1108;color:#E8A84A;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;border:none;border-radius:var(--r);cursor:pointer}
 #iov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:700;display:none;align-items:flex-end}
 #iov.on{display:flex}
-#imod{background:var(--card);width:100%;max-height:80dvh;border-radius:20px 20px 0 0;overflow-y:auto;padding:0 0 calc(env(safe-area-inset-bottom,16px)+16px)}
+#imod{background:var(--card);width:100%;max-height:80vh;max-height:80dvh;border-radius:20px 20px 0 0;overflow-y:auto;padding:0 0 calc(env(safe-area-inset-bottom,16px)+16px)}
 .ibody{padding:16px}
 .iinfo{font-size:13px;color:var(--mu);line-height:1.6;margin-bottom:14px}
 .iinfo strong{color:var(--tx)}
@@ -836,15 +836,27 @@ async function initMap() {
       styles: [{ featureType:'poi', elementType:'labels', stylers:[{visibility:'off'}] }, { featureType:'transit', stylers:[{visibility:'off'}] }]
     });
     document.getElementById('map-err').classList.remove('on');
-    // Wait for map to be fully idle before rendering markers
-    // This is critical on desktop where map may not be sized yet
+    // Force explicit height on map container (Safari flexbox fix)
+    const mapEl2 = document.getElementById('map');
+    const contentEl2 = mapEl2.parentElement;
+    if (contentEl2) {
+      const h = window.innerHeight - contentEl2.getBoundingClientRect().top;
+      if (h > 100) mapEl2.style.height = h + 'px';
+    }
+    // Render on idle (map fully sized and ready)
     google.maps.event.addListenerOnce(gMap, 'idle', () => {
       renderMarkers();
-      // Geocode missing coords in background
       geocodeAll().then(() => renderMarkers());
     });
-    // Also render immediately in case idle already fired
-    setTimeout(() => renderMarkers(), 200);
+    // Belt and suspenders — force resize + render at 300ms and 1s
+    setTimeout(() => {
+      google.maps.event.trigger(gMap, 'resize');
+      renderMarkers();
+    }, 300);
+    setTimeout(() => {
+      google.maps.event.trigger(gMap, 'resize');
+      renderMarkers();
+    }, 1000);
   } catch(err) { showMapErr('Map failed: ' + err.message); }
 }
 
@@ -1278,8 +1290,11 @@ function switchTab(t){
       if(!gMap){
         initMap();
       } else {
-        // Always resize + re-render when switching to map tab
+        // Force height recalc + resize for Safari
         setTimeout(()=>{
+          const mapEl3 = document.getElementById('map');
+          const h = window.innerHeight - mapEl3.getBoundingClientRect().top;
+          if (h > 100) mapEl3.style.height = h + 'px';
           google.maps.event.trigger(gMap,'resize');
           renderMarkers();
         }, 50);
