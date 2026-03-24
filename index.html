@@ -248,6 +248,15 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
 .pop-type{font-size:11px;color:#666}
 .pop-btn{margin-top:8px;display:block;width:100%;padding:7px;background:#1A1108;color:#E8A84A;border:none;border-radius:7px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer}
 .pop-rbtn{margin-top:4px;display:block;width:100%;padding:6px;background:#185FA5;color:#E6F1FB;border:none;border-radius:7px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer}
+#pwov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:800;display:none;align-items:center;justify-content:center;padding:20px}
+#pwov.on{display:flex}
+#pwmod{background:var(--card);width:100%;max-width:400px;border-radius:16px;overflow:hidden}
+.pwfield{margin-bottom:12px}
+.pwfield label{display:block;font-size:12px;color:var(--mu);margin-bottom:4px}
+.pwfield input{width:100%;border-radius:8px;border:1px solid var(--bdr);background:var(--bg);font-family:'DM Sans',sans-serif;font-size:14px;padding:9px 12px;color:var(--tx);outline:none}
+.pwfield input:focus{border-color:var(--b)}
+#pw-err{font-size:12px;color:#A32D2D;margin-top:8px;display:none}
+#pw-ok{font-size:12px;color:#0C6B3C;margin-top:8px;display:none}
 @media(min-width:600px){
   #pan,#emod,#imod{max-width:480px;margin:0 auto;border-radius:20px}
   #pov,#eov,#iov{align-items:center}
@@ -282,6 +291,7 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
   <button class="hbtn" id="btn-import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Import</button>
   <button class="hbtn" id="btn-export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
   <button class="hbtn" id="btn-signout" style="color:rgba(232,168,74,.6)">Out</button>
+  <button class="hbtn" id="btn-pw" style="color:rgba(232,168,74,.6)" title="Change password">&#x1F512;</button>
 </header>
 <div class="toolbar">
   <div class="sw"><span class="si">&#x2315;</span><input type="text" id="search" placeholder="Search accounts, cities, reps&hellip;"></div>
@@ -434,9 +444,27 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
 </div>
 
 <!-- Firebase SDK -->
+<!-- Change Password Modal -->
+<div id="pwov">
+  <div id="pwmod">
+    <div class="mhdr">
+      <div class="mtit">Change password</div>
+      <button class="mcls" id="btn-pwcls">&times;</button>
+    </div>
+    <div style="padding:16px">
+      <div class="pwfield"><label>Current password</label><input type="password" id="pw-cur" placeholder="Current password" autocomplete="current-password"></div>
+      <div class="pwfield"><label>New password</label><input type="password" id="pw-new" placeholder="New password (min 6 characters)" autocomplete="new-password"></div>
+      <div class="pwfield"><label>Confirm new password</label><input type="password" id="pw-con" placeholder="Confirm new password" autocomplete="new-password"></div>
+      <div id="pw-err"></div>
+      <div id="pw-ok">&check; Password updated successfully</div>
+      <button class="savbtn" style="margin:12px 0 0" id="btn-pwsave">Update password</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot, writeBatch, serverTimestamp, query, orderBy, limit, addDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ── FIREBASE INIT ──
@@ -494,6 +522,14 @@ document.getElementById('login-btn').addEventListener('click', async () => {
 });
 document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-btn').click(); });
 document.getElementById('btn-signout').addEventListener('click', () => signOut(auth));
+document.getElementById('btn-pw').addEventListener('click', openPwModal);
+document.getElementById('btn-pwcls').addEventListener('click', closePwModal);
+document.getElementById('btn-pwsave').addEventListener('click', doChangePassword);
+document.getElementById('pwov').addEventListener('click', e => { if (e.target === document.getElementById('pwov')) closePwModal(); });
+// Allow Enter key in password fields
+['pw-cur','pw-new','pw-con'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') doChangePassword(); });
+});
 
 onAuthStateChanged(auth, async user => {
   console.log('Auth state changed:', user ? 'signed in as ' + user.email : 'signed out');
@@ -1317,6 +1353,55 @@ function showToast(msg, duration){
 }
 
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';} 
+
+// ── CHANGE PASSWORD ──
+function openPwModal() {
+  ['pw-cur','pw-new','pw-con'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pw-err').style.display = 'none';
+  document.getElementById('pw-ok').style.display = 'none';
+  document.getElementById('btn-pwsave').disabled = false;
+  document.getElementById('btn-pwsave').textContent = 'Update password';
+  document.getElementById('pwov').style.display = 'flex';
+  setTimeout(() => document.getElementById('pwov').classList.add('on'), 10);
+}
+function closePwModal() {
+  document.getElementById('pwov').classList.remove('on');
+  setTimeout(() => document.getElementById('pwov').style.display = 'none', 200);
+}
+async function doChangePassword() {
+  const cur = document.getElementById('pw-cur').value;
+  const nw  = document.getElementById('pw-new').value;
+  const con = document.getElementById('pw-con').value;
+  const errEl = document.getElementById('pw-err');
+  const okEl  = document.getElementById('pw-ok');
+  const btn   = document.getElementById('btn-pwsave');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  if (!cur) { errEl.textContent = 'Enter your current password.'; errEl.style.display = 'block'; return; }
+  if (nw.length < 6) { errEl.textContent = 'New password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+  if (nw !== con) { errEl.textContent = 'New passwords do not match.'; errEl.style.display = 'block'; return; }
+  if (nw === cur) { errEl.textContent = 'New password must be different from current password.'; errEl.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Updating…';
+  try {
+    // Re-authenticate first (required by Firebase before sensitive operations)
+    const credential = EmailAuthProvider.credential(currentUser.email, cur);
+    await reauthenticateWithCredential(currentUser, credential);
+    await updatePassword(currentUser, nw);
+    okEl.style.display = 'block';
+    btn.textContent = 'Updated!';
+    setTimeout(() => closePwModal(), 1500);
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Update password';
+    if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+      errEl.textContent = 'Current password is incorrect.';
+    } else if (e.code === 'auth/weak-password') {
+      errEl.textContent = 'Password is too weak — use at least 6 characters.';
+    } else {
+      errEl.textContent = 'Error: ' + e.message;
+    }
+    errEl.style.display = 'block';
+  }
+}
 
 // ── EXPOSE GLOBALS NEEDED BY MAPS / EXTERNAL CALLBACKS ──
 window.forceReGeocode = async function() {
