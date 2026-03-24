@@ -539,43 +539,41 @@ function startListening() {
       if (!a.followUpDate) a.followUpDate = '';
       if (!a.followUpNotes) a.followUpNotes = '';
     });
-    // Deduplicate by account name — keep the one with better coordinates
+    // Deduplicate by name, keeping best coords
     const seen = new Map();
+    const toDelete = [];
     rawDocs.forEach(a => {
       const key = (a.name || '').toLowerCase().trim();
       if (!seen.has(key)) {
         seen.set(key, a);
       } else {
         const existing = seen.get(key);
-        // Prefer the one with real coordinates over center-of-NM defaults
-        const hasRealCoords = a.lat && a.lng && !(Math.abs(a.lat - 34.5) < 0.01 && Math.abs(a.lng + 106.5) < 0.01);
-        const existingHasReal = existing.lat && existing.lng && !(Math.abs(existing.lat - 34.5) < 0.01 && Math.abs(existing.lng + 106.5) < 0.01);
-        if (hasRealCoords && !existingHasReal) {
-          // Delete the worse duplicate from Firestore
-          deleteDoc(doc(db, 'accounts', existing._docId)).catch(e => console.warn('cleanup err:', e));
+        const aReal = a.lat && !(Math.abs(a.lat - 34.5) < 0.01);
+        const exReal = existing.lat && !(Math.abs(existing.lat - 34.5) < 0.01);
+        if (aReal && !exReal) {
+          toDelete.push(existing._docId);
           seen.set(key, a);
         } else {
-          // Delete this duplicate
-          deleteDoc(doc(db, 'accounts', a._docId)).catch(e => console.warn('cleanup err:', e));
+          toDelete.push(a._docId);
         }
       }
     });
-    A = Array.from(seen.values());
-    if (rawDocs.length !== A.length) {
-      console.log('Deduplicated', rawDocs.length, 'docs to', A.length, 'unique accounts');
-      showToast('Cleaned up ' + (rawDocs.length - A.length) + ' duplicate accounts');
+    // Delete duplicates in background
+    if (toDelete.length > 0) {
+      console.log('Deleting', toDelete.length, 'duplicate documents...');
+      showToast('Removing ' + toDelete.length + ' duplicates…');
+      Promise.all(toDelete.map(id => deleteDoc(doc(db, 'accounts', id))))
+        .then(() => showToast('✓ Cleaned up ' + toDelete.length + ' duplicate accounts'))
+        .catch(e => console.warn('Cleanup error:', e));
     }
+    A = Array.from(seen.values());
     filt = [...A];
     setSyncStatus('live');
     showToast('✓ ' + A.length + ' accounts loaded');
-    // Always render current tab — don't depend on map being ready
+    // Render current tab
     if (activeTab === 'map') {
-      // Try to init map, but show list as fallback
       if (typeof google !== 'undefined' && google.maps) {
-        initMap();
-      } else {
-        // Map API not ready yet — switch to list so user sees their data
-        switchTab('list');
+        if (!gMap) initMap(); else renderMarkers();
       }
     } else if (activeTab === 'list') {
       renderList();
@@ -683,12 +681,28 @@ async function geocodeOne(addr) {
   }
   const gc = getGeocoder();
   if (!gc) return null;
+  // Convert to title case for better geocoding accuracy
+  // Clean up address formatting for better geocoding
+  const cleaned = addr.trim()
+    .replace(/S[.]E[.]/g, 'SE').replace(/N[.]E[.]/g, 'NE')
+    .replace(/N[.]W[.]/g, 'NW').replace(/S[.]W[.]/g, 'SW');
+
   return new Promise(resolve => {
-    gc.geocode({ address: addr.trim(), region: 'us' }, (results, status) => {
+    gc.geocode({
+      address: cleaned,
+      componentRestrictions: { country: 'US', administrativeArea: 'NM' }
+    }, (results, status) => {
       if (status === 'OK' && results && results.length > 0) {
         const loc = results[0].geometry.location;
         resolve({ lat: loc.lat(), lng: loc.lng() });
-      } else resolve(null);
+      } else {
+        // Retry without state restriction as fallback
+        gc.geocode({ address: cleaned }, (r2, s2) => {
+          if (s2 === 'OK' && r2 && r2.length > 0) {
+            resolve({ lat: r2[0].geometry.location.lat(), lng: r2[0].geometry.location.lng() });
+          } else resolve(null);
+        });
+      }
     });
   });
 }
@@ -810,7 +824,7 @@ function setFilter(f) {
   applyFilters();
 }
 function applyFilters() {
-  const q = document.getElementById('search').value.trim().toLowerCase();
+  const q = (document.getElementById('search') ? document.getElementById('search').value.trim().toLowerCase() : '');
   filt = A.filter(a => {
     const mt = activeF==='all'?true:activeF==='on'?a.type==='ON':activeF==='off'?a.type==='OFF':activeF==='pro'?a.status==='prospect':activeF==='bourbon'?a.bourbon>0:activeF==='rye'?a.rye>0:activeF==='of'?a.oldFashioned>0:true;
     const mq = !q || [a.name,a.address,a.contact||'',a.distributorRep||'',a.notes||''].some(s=>s.toLowerCase().includes(q));
@@ -818,6 +832,7 @@ function applyFilters() {
   });
   if (activeTab==='map') renderMarkers();
   else if (activeTab==='list') renderList();
+  else if (activeTab==='dash') renderDash();
 }
 
 // ── TREND SPARK ──
