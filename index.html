@@ -527,17 +527,44 @@ function startListening() {
   unsubAccounts = onSnapshot(ref, snapshot => {
     console.log('Firestore snapshot received, empty:', snapshot.empty, 'size:', snapshot.size);
     if (snapshot.empty) {
-      // First time — seed from RAW data
+      if (window._seeding) { console.log('Already seeding, skipping...'); return; }
+      window._seeding = true;
       console.log('Firestore: empty collection, seeding...');
       seedDatabase();
       return;
     }
-    A = snapshot.docs.map(d => ({ ...d.data(), _docId: d.id }));
-    A.forEach(a => {
+    let rawDocs = snapshot.docs.map(d => ({ ...d.data(), _docId: d.id }));
+    rawDocs.forEach(a => {
       ['q90_bourbon','q90_rye','q90_of'].forEach(k => { if (a[k] === undefined) a[k] = 0; });
       if (!a.followUpDate) a.followUpDate = '';
       if (!a.followUpNotes) a.followUpNotes = '';
     });
+    // Deduplicate by account name — keep the one with better coordinates
+    const seen = new Map();
+    rawDocs.forEach(a => {
+      const key = (a.name || '').toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.set(key, a);
+      } else {
+        const existing = seen.get(key);
+        // Prefer the one with real coordinates over center-of-NM defaults
+        const hasRealCoords = a.lat && a.lng && !(Math.abs(a.lat - 34.5) < 0.01 && Math.abs(a.lng + 106.5) < 0.01);
+        const existingHasReal = existing.lat && existing.lng && !(Math.abs(existing.lat - 34.5) < 0.01 && Math.abs(existing.lng + 106.5) < 0.01);
+        if (hasRealCoords && !existingHasReal) {
+          // Delete the worse duplicate from Firestore
+          deleteDoc(doc(db, 'accounts', existing._docId)).catch(e => console.warn('cleanup err:', e));
+          seen.set(key, a);
+        } else {
+          // Delete this duplicate
+          deleteDoc(doc(db, 'accounts', a._docId)).catch(e => console.warn('cleanup err:', e));
+        }
+      }
+    });
+    A = Array.from(seen.values());
+    if (rawDocs.length !== A.length) {
+      console.log('Deduplicated', rawDocs.length, 'docs to', A.length, 'unique accounts');
+      showToast('Cleaned up ' + (rawDocs.length - A.length) + ' duplicate accounts');
+    }
     filt = [...A];
     setSyncStatus('live');
     showToast('✓ ' + A.length + ' accounts loaded');
@@ -667,29 +694,35 @@ async function geocodeOne(addr) {
 }
 
 async function geocodeAll() {
-  const need = A.filter(a => !a.lat || !a.lng || (a.lat === 34.5 && a.lng === -106.5));
-  if (!need.length) return;
-  if (!getGeocoder()) return;
+  const need = A.filter(a => !a.lat || !a.lng || (Math.abs(a.lat - 34.5) < 0.01 && Math.abs(a.lng + 106.5) < 0.01));
+  if (!need.length) { console.log('All accounts already geocoded'); return; }
+  if (!getGeocoder()) { console.warn('Geocoder not ready'); return; }
+  console.log('Geocoding', need.length, 'accounts...');
   document.getElementById('geobar').classList.add('on');
   const bar = document.getElementById('geo-fill');
   const txt = document.getElementById('geo-txt');
   let done = 0;
-  for (let i = 0; i < need.length; i += 8) {
-    const batch2 = need.slice(i, i + 8);
+  for (let i = 0; i < need.length; i += 4) {
+    const batch2 = need.slice(i, i + 4);
     await Promise.all(batch2.map(async a => {
       const r = await geocodeOne(a.address);
       if (r) {
         a.lat = r.lat; a.lng = r.lng;
-        await saveAccount(a);
+        // Save coords back to Firestore so other devices benefit
+        saveAccount(a).catch(e => console.warn('Failed to save geocode:', e));
       }
       done++;
       bar.style.width = (done / need.length * 100) + '%';
-      txt.textContent = 'Geocoding ' + done + ' of ' + need.length;
+      txt.textContent = 'Geocoding ' + done + ' of ' + need.length + ' addresses';
     }));
-    await new Promise(r => setTimeout(r, 100));
+    // Small delay to avoid hitting Maps API rate limits
+    await new Promise(r => setTimeout(r, 200));
+    // Render markers progressively as we go
+    if (done % 20 === 0) renderMarkers();
   }
   document.getElementById('geobar').classList.remove('on');
   renderMarkers();
+  showToast('✓ All addresses located');
 }
 
 // ── PIN COLORS ──
