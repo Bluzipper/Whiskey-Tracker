@@ -559,9 +559,19 @@ function showDbError(code, message) {
     header.parentNode.insertBefore(banner, header.nextSibling);
   }
   if (code === 'permission-denied') {
-    banner.innerHTML = '<strong>Firestore security rules need updating.</strong> Go to Firebase Console → Firestore Database → Rules and replace the rules with the ones shown in setup instructions. <button onclick="document.getElementById('db-error-banner').remove()" style="float:right;background:none;border:none;color:#A32D2D;cursor:pointer;font-size:14px">×</button>';
+    const closeBtn = document.createElement('button');
+    closeBtn.style.cssText = 'float:right;background:none;border:none;color:#A32D2D;cursor:pointer;font-size:14px';
+    closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => banner.remove());
+    banner.innerHTML = '<strong>Firestore security rules need updating.</strong> Go to Firebase Console → Firestore Database → Rules and set: allow read, write: if request.auth != null;';
+    banner.appendChild(closeBtn);
   } else {
-    banner.innerHTML = '<strong>Database error (' + code + '):</strong> ' + message + ' <button onclick="document.getElementById('db-error-banner').remove()" style="float:right;background:none;border:none;color:#A32D2D;cursor:pointer;font-size:14px">×</button>';
+    const closeBtn2 = document.createElement('button');
+    closeBtn2.style.cssText = 'float:right;background:none;border:none;color:#A32D2D;cursor:pointer;font-size:14px';
+    closeBtn2.textContent = '×';
+    closeBtn2.addEventListener('click', () => banner.remove());
+    banner.textContent = 'Database error (' + code + '): ' + message;
+    banner.appendChild(closeBtn2);
   }
 }
 
