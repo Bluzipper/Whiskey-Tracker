@@ -1302,8 +1302,8 @@ function setImportTab(tab) {
 }
 
 async function handleNewAccountsImport(rows) {
-  const hdr = rows[0].map(h => h.toLowerCase().trim());
-  const ni = hdr.indexOf('name');
+  const hdr = rows[0].map(h => h.toLowerCase().replace(/^﻿/,'').replace(/['"]/g,'').trim());
+  const ni = hdr.findIndex(h => h === 'name' || h.includes('name'));
   const ai = hdr.indexOf('address');
   const ti = hdr.indexOf('type');
   const bi = hdr.findIndex(h => h === 'bourbon');
