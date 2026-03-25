@@ -1358,11 +1358,15 @@ async function handleImport(file){
   if(!file)return;
   const reader=new FileReader();
   reader.onload=async e=>{
-    const rows=parseCSV(e.target.result);
+    const rawText=e.target.result.replace(/^\uFEFF/,'');
+    const rows=parseCSV(rawText);
     if(rows.length<2){showIRes('err','File appears empty.');return;}
-    const hdr=rows[0].map(h=>h.toLowerCase());
-    const ni=hdr.indexOf('account name');
-    if(ni<0){showIRes('err','CSV must have an "Account Name" column.');return;}
+    // Route to new accounts handler if that tab is active
+    if(importTab==='new'){await handleNewAccountsImport(rows);return;}
+    // Update volumes handler
+    const hdr=rows[0].map(h=>h.toLowerCase().replace(/['"]/g,'').trim());
+    const ni=hdr.findIndex(h=>h==='account name'||h.includes('account name'));
+    if(ni<0){showIRes('err','Column not found. Headers: '+hdr.join(' | '));return;}
     const fi=k=>hdr.findIndex(h=>h===k||h.includes(k));
     const bi=fi('bourbon'),ri=fi('rye'),oi=fi('old fashioned');
     const q90bi=hdr.findIndex(h=>h.includes('q90')&&h.includes('bourbon'));
