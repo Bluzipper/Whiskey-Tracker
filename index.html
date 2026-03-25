@@ -1578,6 +1578,8 @@ document.getElementById('opt-cur').addEventListener('click',()=>setSt('current')
 document.getElementById('opt-pro').addEventListener('click',()=>setSt('prospect'));
 document.getElementById('btn-icls').addEventListener('click',()=>{const iov=document.getElementById('iov');iov.classList.remove('on');setTimeout(()=>iov.style.display='none',200);});
 document.getElementById('btn-idone').addEventListener('click',()=>{const iov=document.getElementById('iov');iov.classList.remove('on');setTimeout(()=>iov.style.display='none',200);});
+document.getElementById('itab-update').addEventListener('click',()=>setImportTab('update'));
+document.getElementById('itab-new').addEventListener('click',()=>setImportTab('new'));
 document.getElementById('ffile').addEventListener('change',e=>handleImport(e.target.files[0]));
 document.getElementById('idrop').addEventListener('click',()=>document.getElementById('ffile').click());
 document.getElementById('idrop').addEventListener('dragover',e=>{e.preventDefault();document.getElementById('idrop').style.borderColor='var(--b)';});
