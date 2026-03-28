@@ -384,7 +384,7 @@ header{height:var(--hh);background:#1A1108;display:flex;align-items:center;gap:8
     <div class="psec" id="p-fu-sec"><div class="stit">Follow-up</div><div id="p-fu"></div></div>
     <div class="psec"><div class="stit">Notes</div><div id="p-nt"></div></div>
     <div class="psec" id="p-audit-sec"><div class="stit">Change history</div><div id="p-audit"></div></div>
-    <div class="panact"><button class="ebtn" id="p-edit">Edit account</button><button class="rbtn" id="p-route">+ Add to route</button></div>
+    <div class="panact"><button class="ebtn" id="p-edit">Edit account</button><button class="rbtn" id="p-route">+ Add to route</button><button class="rbtn" id="p-del" style="background:#A32D2D;color:#fff;border-color:#A32D2D">Delete</button></div>
   </div>
 </div>
 
@@ -1141,6 +1141,10 @@ async function saveEdit(){
   if(editId){
     const i=A.findIndex(x=>x.id===editId);
     const addrChanged=A[i].address!==d.address;
+    // Auto-convert prospect to current if volume entered
+    if(d.status==='prospect' && (d.bourbon||0)+(d.rye||0)+(d.oldFashioned||0)>0){
+      d.status='current';
+    }
     const updated={...A[i],...d};
     if(addrChanged&&d.address){
       btn.textContent='Locating\u2026';
@@ -1409,18 +1413,13 @@ async function handleImport(file){
     let updated=0,skipped=0;
     const promises=rows.slice(1).map(async row=>{
       if(!row[ni])return;
-      // Strip asterisks from imported name for matching
-      const importName=row[ni].replace(/\*/g,'').toLowerCase().trim();
-      const acct=A.find(a=>a.name.toLowerCase().trim()===importName);
+      const acct=A.find(a=>a.name.toLowerCase().trim()===row[ni].toLowerCase().trim());
       if(!acct){skipped++;return;}
-      const sv=(idx,key)=>{if(idx>=0&&row[idx]!==undefined&&row[idx]!==''){const v=parseFloat(row[idx]);if(!isNaN(v))acct[key]=v;}};
+      const sv=(idx,key)=>{if(idx>=0&&row[idx]!==undefined&&row[idx]!==''){const v=parseInt(row[idx]);if(!isNaN(v))acct[key]=v;}};
       sv(bi,'bourbon');sv(ri,'rye');sv(oi,'oldFashioned');
       sv(q90bi,'q90_bourbon');sv(q90ri,'q90_rye');sv(q90oi,'q90_of');
-      // If account has volume and is a prospect, convert to current
-      const hasVol=(acct.bourbon||0)+(acct.rye||0)+(acct.oldFashioned||0)>0;
-      if(hasVol && acct.status==='prospect') acct.status='current';
       await saveAccount(acct);
-      await logChange(acct.id,'imported','volume update'+(hasVol&&acct.status==='current'?' + converted to current':''));
+      await logChange(acct.id,'imported','volume update');
       updated++;
     });
     await Promise.all(promises);
@@ -1570,6 +1569,23 @@ function showMyLocation() {
   }, { enableHighAccuracy: true, timeout: 10000 });
 }
 
+// ── DELETE ACCOUNT ──
+async function deleteAccount(id) {
+  const a = A.find(x => x.id === id);
+  if (!a) return;
+  if (!confirm('Delete "' + a.name + '"? This cannot be undone.')) return;
+  try {
+    if (a._docId) await deleteDoc(doc(db, 'accounts', a._docId));
+    A = A.filter(x => x.id !== id);
+    closePanel();
+    renderList();
+    if (gMap) renderMarkers();
+    showToast('\u2713 ' + a.name + ' deleted');
+  } catch(e) {
+    showToast('\u26A0 Delete failed: ' + e.message);
+  }
+}
+
 // ── EXPOSE GLOBALS NEEDED BY MAPS / EXTERNAL CALLBACKS ──
 window.forceReGeocode = async function() {
   if (!confirm('This will re-geocode all 169 accounts from scratch. Continue?')) return;
@@ -1635,6 +1651,7 @@ document.getElementById('pov').addEventListener('click',e=>{if(e.target===docume
 document.getElementById('eov').addEventListener('click',e=>{if(e.target===document.getElementById('eov'))closeEdit();});
 document.getElementById('iov').addEventListener('click',e=>{if(e.target===document.getElementById('iov')){const iov=document.getElementById('iov');iov.classList.remove('on');setTimeout(()=>iov.style.display='none',200);}});
 document.getElementById('p-edit').addEventListener('click',()=>openEdit(curId));
+document.getElementById('p-del').addEventListener('click',()=>deleteAccount(curId));
 document.getElementById('p-route').addEventListener('click',()=>{if(curId)addToRoute(curId);closePanel();switchTab('route');});
 document.getElementById('btn-retry').addEventListener('click',()=>{document.getElementById('map-err').classList.remove('on');gMap=null;initMap();});
 document.getElementById('btn-opt').addEventListener('click',optimizeRoute);
